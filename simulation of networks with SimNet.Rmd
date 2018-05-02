@@ -1,0 +1,270 @@
+---
+title: "SD with NetSim"
+author: "Kushan De Silva"
+date: "May 3, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages(c("NetSim", "Rcpp"))
+library("NetSim")
+
+processState <- create_process_state()
+
+nActors <- 5
+network <- create_network(matrix(1, nActors, nActors))
+
+processState <- add_network(processState, network, name = "friendship")
+
+get_network_index(processState, name = "friendship")
+
+as.matrix(network)
+
+attribute <- create_attribute_container(
+c(rep(0, nActors%/%2), rep(1, nActors - nActors%/%2)))
+processState <- add_attribute_container(processState, attribute, name = "gender")
+as.numeric(attribute)
+
+get_attribute_container_index(processState, name="gender")
+
+processState <- add_global_attribute(processState, value = 1, name = "timer")
+get_global_attribute(processState, name="timer")
+
+get_global_attribute_index(processState, name="timer")
+
+modelManager <- create_model_manager()
+
+nActors <- 21
+mat <- matrix(0, nActors, nActors)
+att <- c(rep(0, nActors/3), rep(1, nActors/3), rep(2, nActors/3))
+network <- create_network(mat)
+attributeContainer <- create_scale_attribute_container(att, min=0, max=3, by = 1)
+processState <- create_process_state()
+processState <- add_network(processState, network, name = "network")
+processState <- add_attribute_container(processState, attributeContainer, name = "attribute")
+networkIndex <- get_network_index(processState)
+attributeIndex <- get_attribute_container_index(processState)
+
+effectContainerHomophily <- create_effect_container()
+effectContainerHomophily <- add_to_effect_container(
+effectContainerHomophily,
+create_effect("density", networkIndex),
+-2.5)
+effectContainerHomophily <- add_to_effect_container(
+  effectContainerHomophily,
+create_effect("recip", networkIndex),
+2.5)
+
+effectContainerHomophily <- add_to_effect_container(
+effectContainerHomophily,
+create_effect("transTrip", networkIndex),
+0.5)
+
+effectContainerHomophily <- add_to_effect_container(
+effectContainerHomophily,
+create_effect("cycle3", networkIndex),
+-0.5)
+
+effectContainerHomophily <- add_to_effect_container(
+effectContainerHomophily,
+create_effect("simX",
+attributeIndex,
+networkIndex,
+0.5),
+1.0)
+
+modelManager <- create_model_manager()
+for (i in c(0 : (nActors - 1) ) ){
+poissonParameter <- 40
+poissonModel <- create_poisson_model(poissonParameter)
+saomHomophilyModel <- create_multinomial_choice_network_change_model(
+i,
+networkIndex,
+effectContainerHomophily
+)
+tieSwapUpdater <- create_tie_swap_updater(networkIndex)
+modelManager <<- add_time_model(modelManager,
+poissonModel)
+modelManager <<- add_change_model(modelManager,
+poissonModel,
+saomHomophilyModel)
+modelManager <<- add_updater(modelManager,
+saomHomophilyModel,
+tieSwapUpdater)
+}
+
+effectContainerInfluence <- create_effect_container()
+effectContainerInfluence <- add_to_effect_container(
+effectContainerInfluence,
+create_effect("linear",
+attributeIndex),
+0.0)
+
+effectContainerInfluence <- add_to_effect_container(
+effectContainerInfluence,
+create_effect("quad",
+attributeIndex),
+0.0)
+
+effectContainerInfluence <- add_to_effect_container(
+effectContainerInfluence,
+create_effect("totSim",
+attributeIndex,
+networkIndex, 10/18),
+2.0)
+
+for (i in c(0 : (nActors - 1))){
+poissonParameterInfluence <- 5
+poissonModelInfluence <- create_poisson_model(
+poissonParameterInfluence)
+behaviorSaom <- create_multinomial_choice_behavior_change_model(
+i,
+attributeIndex,
+effectContainerInfluence
+)
+setAttributeUpdater <- create_actor_attribute_set_updater(
+attributeIndex, i)
+modelManager <<- add_time_model(modelManager,
+poissonModelInfluence)
+modelManager <<- add_change_model(modelManager,
+poissonModelInfluence,
+behaviorSaom)
+modelManager <<- add_updater(modelManager,
+behaviorSaom,
+setAttributeUpdater)
+}
+
+nActors <- 10
+mat <- matrix(0, nActors, nActors)
+processState <- create_process_state()
+network <- create_network(mat)
+network <- add_random_ties_to_network(network, 0.3)
+processState <- add_network(processState, network, name = "friendship")
+networkIndex <- get_network_index(processState, name = "friendship")
+processState <- add_global_attribute(processState, value = 0, name = "timer")
+timerIndex <- get_global_attribute_index(processState, "timer")
+
+modelManager <- create_model_manager()
+roundBasedTimeModel <- create_round_based_time_model(timerIndex,
+intervalLength = 1.0)
+timerUpdater <- create_timer_updater(timerIndex)
+jrModel <- create_jackson_rogers_change_model(networkIndex,
+pLinkToParentNode = 1.0, pLinkToNeigborNode = 0.5,
+nParentNodes = 1, nNeighborNodes = 3)
+addTiesToNewActorUpdater <- create_add_ties_from_newborn_actor_updater(
+networkIndex)
+addActorUpdater <- create_add_actor_updater()
+modelManager <- add_time_model(modelManager, roundBasedTimeModel)
+modelManager <- add_time_updater(modelManager, timerUpdater)
+modelManager <- add_change_model(modelManager, roundBasedTimeModel, jrModel)
+modelManager <- add_updater(modelManager, jrModel, addActorUpdater)
+modelManager <- add_updater(modelManager, jrModel, addTiesToNewActorUpdater)
+
+nActors <- 19
+mat <- matrix(0, nActors, nActors)
+network <- create_network(mat)
+network <- add_ring_lattice_to_network(network, 4)
+processState <- create_process_state()
+processState <- add_network(processState, network, name="friendship")
+networkIndex <- get_network_index(processState, "friendship")
+processState <- add_global_attribute(processState, value = 0, name = "timer")
+timerIndex <- get_global_attribute_index(processState, "timer")
+
+modelManager <- create_model_manager()
+roundBasedTimeModel <- create_round_based_time_model(timerIndex)
+wsModel <- create_watts_strogatz_change_model(networkIndex)
+rewireUpdater <- create_rewire_tie_updater(networkIndex)
+timerUpdater <- create_timer_updater(timerIndex)
+modelManager <- add_time_model(modelManager, roundBasedTimeModel)
+modelManager <- add_time_updater(modelManager, timerUpdater)
+modelManager <- add_change_model(modelManager, roundBasedTimeModel, wsModel)
+modelManager <- add_updater(modelManager, wsModel, rewireUpdater)
+
+nActors <- 10
+timeSpan <- 20
+mat <- matrix(0, nActors, nActors)
+processState <- create_process_state()
+network <- create_network(mat)
+network <- add_random_ties_to_network(network, 0.3)
+processState <- add_network(processState, network, name="friendship")
+networkIndex <- get_network_index(processState, "friendship")
+processState <- add_global_attribute(processState, value = 0, name = "timer")
+timerIndex <- get_global_attribute_index(processState, "timer")
+processState <- add_attribute_container(processState,
+create_attribute_container(rep(3.0, nActors)), name = "poissonParameter")
+processState <- add_attribute_container(processState,
+create_attribute_container(rep(-2.0, nActors)), name = "density")
+processState <- add_attribute_container(processState,
+create_attribute_container(rep(2.0, nActors)), name = "reciprocity")
+
+processState <- add_attribute_container(processState,
+create_attribute_container(rep(0.0, nActors)), name = "transitivity")
+processState <- add_attribute_container(processState,
+create_attribute_container(rep(0.0, nActors)), name = "cycle3")
+poissonAttributeIndex <- get_attribute_container_index(processState,
+"poissonParameter")
+densityAttributeIndex <- get_attribute_container_index(processState,
+"density")
+reciprocityAttributeIndex <- get_attribute_container_index(processState,
+"reciprocity")
+transitivityAttributeIndex <- get_attribute_container_index(processState,
+"transitivity")
+threeCycleAttributeIndex <- get_attribute_container_index(processState,
+"cycle3")
+
+poissonAttributeModel <- create_attribute_poisson_model(poissonAttributeIndex)
+roundBasedTimeModel <- create_round_based_time_model(timerIndex)
+jrModel <- create_jackson_rogers_change_model(networkIndex,
+pLinkToParentNode = 1.0, pLinkToNeigborNode = 0.5,
+nParentNodes = 1, nNeighborNodes = 3)
+addTiesToNewActorUpdater <- create_add_ties_from_newborn_actor_updater(
+networkIndex)
+addActorUpdater <- create_add_actor_updater()
+addPoissonValueUpdater <- create_set_attribute_of_newborn_actor_updater(
+poissonAttributeIndex, 3.0)
+addDensityValueUpdater <- create_set_attribute_of_newborn_actor_updater(
+densityAttributeIndex, -2.0)
+addReciprocityValueUpdater <- create_set_attribute_of_newborn_actor_updater(
+reciprocityAttributeIndex, 2.0)
+
+addTransitivityValueUpdater <- create_set_attribute_of_newborn_actor_updater(
+transitivityAttributeIndex, 0.5)
+addThreeCycleValueUpdater <- create_set_attribute_of_newborn_actor_updater(
+threeCycleAttributeIndex, -0.2)
+
+timerUpdater <- create_timer_updater(timerIndex)
+tieSwapUpdater <- create_tie_swap_updater(networkIndex)
+saom <- create_attribute_multinomial_choice_network_change_model(
+networkIndex, poissonAttributeIndex, tieSwapUpdater)
+saom <- add_effect(saom, create_effect("density", networkIndex),
+densityAttributeIndex)
+saom <- add_effect(saom, create_effect("recip", networkIndex),
+reciprocityAttributeIndex)
+saom <- add_effect(saom, create_effect("transTrip", networkIndex),
+transitivityAttributeIndex)
+saom <- add_effect(saom, create_effect("cycle3", networkIndex),
+threeCycleAttributeIndex)
+
+
+modelManager <- create_model_manager()
+modelManager <- add_time_model(modelManager, roundBasedTimeModel)
+modelManager <- add_time_updater(modelManager, timerUpdater)
+modelManager <- add_change_model(modelManager, roundBasedTimeModel, jrModel)
+modelManager <- add_updater(modelManager, jrModel, addActorUpdater)
+modelManager <- add_updater(modelManager, jrModel, addTiesToNewActorUpdater)
+modelManager <- add_updater(modelManager, jrModel, addPoissonValueUpdater)
+modelManager <- add_updater(modelManager, jrModel, addDensityValueUpdater)
+modelManager <- add_updater(modelManager, jrModel, addReciprocityValueUpdater)
+modelManager <- add_updater(modelManager, jrModel, addTransitivityValueUpdater)
+modelManager <- add_updater(modelManager, jrModel, addThreeCycleValueUpdater)
+modelManager <- add_time_model(modelManager, poissonAttributeModel)
+modelManager <- add_change_model(modelManager, poissonAttributeModel, saom)
+modelManager <- add_updater(modelManager, saom, tieSwapUpdater)
+
+
+```
+
